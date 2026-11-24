@@ -1,0 +1,36 @@
+flowchart TB
+    subgraph R["Representante"]
+      A([Inicio]) --> B[Preencher pedido]
+      B --> C[Enviar pedido]
+    end
+    subgraph S["Sistema comercial"]
+      C --> D[Validar cliente, itens e precos]
+      D --> E{Pedido valido?}
+      E -->|[true]| F[Persistir pedido EM_ANALISE]
+      E -->|[false]| X[Exibir erros de validacao]
+      F --> G{Desconto acima do limite?}
+      G -->|[true]| H[Solicitar aprovacao]
+      G -->|[false]| I[Aplicar aprovacao automatica]
+      H --> J{Aprovador autorizado e nao e autor?}
+      J -->|[true]| K[Registrar decisao de aprovacao]
+      J -->|[false]| L[Rejeitar decisao e manter pendente]
+      K --> M[Gravar versao aprovada]
+      I --> M
+      M --> N{{Fork: processamento paralelo}}
+      N --> O[Gerar documento do pedido]
+      N --> P[Publicar evento para ERP]
+      N --> Q[Preparar fila logistica]
+      O --> Z{{Join: sincronizacao}}
+      P --> Z
+      Q --> Z
+      Z --> T[Atualizar visao do pedido]
+      T --> U([Fim])
+      L --> V([Fim: aguardando aprovador])
+      X --> W([Fim: corrigir dados])
+    end
+    subgraph E["ERP / servicos externos"]
+      P -.-> Y[Adaptador valida e envia ao ERP]
+      Y -.-> Y2{Resposta confirmada?}
+      Y2 -->|[true]| Y3[Registrar protocolo de integracao]
+      Y2 -->|[false]| Y4[Registrar falha e agendar retentativa]
+    end

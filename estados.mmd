@@ -1,0 +1,21 @@
+stateDiagram-v2
+    [*] --> RASCUNHO
+    state RASCUNHO {
+        [*] --> Editando
+        Editando: do / atualizarItensECondicoes()
+        Editando --> [*]
+    }
+    RASCUNHO --> EM_ANALISE: enviar [pedidoValido] / registrarEnvio()
+    EM_ANALISE --> AGUARDANDO_APROVACAO: avaliar [descontoAcimaLimite] / solicitarAprovacao()
+    EM_ANALISE --> APROVADO: avaliar [descontoDentroLimite] / aprovarAutomaticamente()
+    AGUARDANDO_APROVACAO --> APROVADO: aprovar [aprovadorValido && autor != aprovador] / congelarVersao()
+    AGUARDANDO_APROVACAO --> REPROVADO: reprovar [aprovadorValido] / registrarMotivo()
+    AGUARDANDO_APROVACAO --> AGUARDANDO_APROVACAO: aprovar [autor == aprovador] / registrarTentativaInvalida()
+    APROVADO --> INTEGRACAO_PENDENTE: publicar [versaoAprovada] / emitirPedidoIntegracao()
+    INTEGRACAO_PENDENTE --> INTEGRADO: confirmar [protocoloRecebido] / salvarProtocolo()
+    INTEGRACAO_PENDENTE --> FALHA_INTEGRACAO: falhar [erroTemporario] / agendarRetentativa()
+    FALHA_INTEGRACAO --> INTEGRACAO_PENDENTE: retentar [tentativas < limite] / incrementarTentativas()
+    INTEGRADO --> EM_SEPARACAO: iniciarSeparacao [pedidoLiberado] / criarTarefaLogistica()
+    EM_SEPARACAO --> EXPEDIDO: confirmarExpedicao [conferenciaOk] / registrarExpedicao()
+    REPROVADO --> [*]
+    EXPEDIDO --> [*]
