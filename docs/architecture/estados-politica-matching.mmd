@@ -1,0 +1,22 @@
+---
+title: Candidatura durante o matching
+---
+stateDiagram-v2
+    direction TB
+    state "PROCESSANDO" as PROCESSANDO
+    PROCESSANDO : do / consultarVagasECalcular()
+    state Desfecho <<choice>>
+
+    [*] --> RECEBIDA
+    RECEBIDA --> PROCESSANDO : CompetenciasDisponiveisEvento<br/>[perfilCompleto]<br/>/ iniciarMatch()
+    PROCESSANDO --> PROCESSANDO : erroNoMatch<br/>[!tentativasEsgotadas]<br/>/ repetirAnalise()
+
+    PROCESSANDO --> Desfecho : ResultadoMatchEvento
+    Desfecho --> PROCESSADA : [statusFinal == PROCESSADA]<br/>/ atualizarResultado()
+    Desfecho --> SEM_MATCH : [statusFinal == SEM_MATCH]<br/>/ atualizarResultado()
+    Desfecho --> FALHA_PROCESSAMENTO : [statusFinal == FALHA_PROCESSAMENTO]<br/>/ atualizarResultado()
+
+    PROCESSADA --> [*]
+    SEM_MATCH --> [*]
+    FALHA_PROCESSAMENTO --> [*]
+
