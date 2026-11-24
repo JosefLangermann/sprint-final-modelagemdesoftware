@@ -1,0 +1,24 @@
+sequenceDiagram
+    participant MQ as RabbitMQ
+    participant MS as MatchService
+    participant Repo as ICandidaturaRepository
+    participant PM as PoliticaMatching
+    participant Broker as IMessageBroker
+
+    MQ-)MS: consumirCompetenciasDisponiveis(evento)
+    MS->>Repo: buscarVagasAtivas(filtros)
+    Repo-->>MS: Lista de VagaDTO
+
+    loop Para cada vaga ativa
+        MS->>PM: calcular(evento.perfil, vaga)
+        PM-->>MS: grau de compatibilidade (double)
+    end
+
+    alt Há vagas compatíveis segundo a política
+        Note over MS: Montar ResultadoMatchEvento com PROCESSADA e a lista de VagaScoreDTO
+    else Nenhuma vaga compatível
+        Note over MS: Montar ResultadoMatchEvento com SEM_MATCH e lista vazia
+    end
+
+    MS->>Broker: publicarResultadoMatch(eventoResultado)
+    Note over MS,Broker: Falhas técnicas seguem o tratamento de retentativas do fluxo de candidatura
