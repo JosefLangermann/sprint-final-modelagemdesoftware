@@ -1,0 +1,31 @@
+sequenceDiagram
+    actor Rep as Representante
+    participant UI as Aplicacao Web
+    participant API as PedidoController
+    participant S as PedidoService
+    participant DB as PedidoRepository
+    participant Bus as Mensageria
+    participant ERP as AdaptadorERP
+
+    Rep->>UI: Enviar pedido (PedidoRequestDTO)
+    UI->>API: POST /pedidos
+    API->>S: enviarPedido(dto, usuarioId)
+    S->>S: validarPedido(dto)
+    alt Dados invalidos
+        S-->>API: ResultadoPedidoDTO(erro)
+        API-->>UI: 400 - dados invalidos
+    else Dados validos
+        S->>DB: salvar(pedido)
+        DB-->>S: PedidoDTO(id, status=EM_ANALISE)
+        S-->>API: ResultadoPedidoDTO(pedido)
+        API-->>UI: 201 - PedidoDTO
+        S-)Bus: publicarPedidoEnviado(PedidoEnviadoEvent)
+        Bus-)ERP: processarPedido(PedidoEnviadoEvent)
+        ERP->>ERP: validarContratoERP(evento)
+        alt Integracao aceita
+            ERP->>DB: registrarIntegracao(id, protocolo)
+            DB-->>ERP: IntegracaoDTO
+        else Falha temporaria
+            ERP-)Bus: publicarFalhaIntegracao(FalhaIntegracaoEvent)
+        end
+    end
