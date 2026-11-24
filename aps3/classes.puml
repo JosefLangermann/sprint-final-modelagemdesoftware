@@ -1,0 +1,140 @@
+@startuml classes
+title Diagrama de Classes e Interfaces - Candidatura, Termo e Assinatura
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+
+enum StatusTermo {
+  RASCUNHO
+  AGUARDANDO_ASSINATURAS
+  VIGENTE
+  RECUSADO
+  EXPIRADO
+  ENCERRADO
+}
+
+enum StatusCandidatura {
+  CONFIRMADA
+  AGUARDANDO_ASSINATURAS
+  VIGENTE
+  REJEITADA
+}
+
+' ---------- Camada de entrada ----------
+class CandidaturaController <<controller>> {
+  + candidatar(alunoId : UUID, demandaId : UUID) : CandidaturaDTO
+  + receberEventoAssinatura(evento : AssinaturaEventoDTO) : void
+}
+
+' ---------- Camada de servico ----------
+class CandidaturaService <<service>> {
+  + candidatar(alunoId : UUID, demandaId : UUID) : CandidaturaDTO
+  + processarEventoAssinatura(evento : AssinaturaEventoDTO) : void
+}
+
+class NotificacaoService <<service>> {
+  + notificar(notificacao : NotificacaoDTO) : void
+}
+
+class PoliticaMatching <<domain service>> {
+  + calcular(p : PerfilCompetenciasDTO, d : DemandaTecnicaDTO) : double
+}
+
+' ---------- Dominio ----------
+class DemandaTecnica {
+  - id : UUID
+  + validarElegibilidade(a : AlunoDTO) : boolean
+  + getConvenio() : Convenio
+}
+
+class Convenio {
+  - id : UUID
+  - cnpj : String
+  - fimVigencia : LocalDate
+  + estaVigente() : boolean
+  + getCnpj() : String
+}
+
+class Candidatura {
+  - id : UUID
+  - grauCompatibilidade : double
+  - status : StatusCandidatura
+  + confirmar(grauCompatibilidade : double) : TermoCompromisso
+}
+
+class TermoCompromisso {
+  - id : UUID
+  - numero : String
+  - status : StatusTermo
+  - assinaturasRecebidas : int
+  - partesSignatarias : int
+  + enviarParaAssinatura() : void
+  + paraPayload() : TermoPayloadDTO
+  + registrarAssinatura(e : AssinaturaEventoDTO) : TermoCompromissoDTO
+}
+
+' ---------- Interfaces (portas) ----------
+interface DemandaRepository <<interface>> {
+  + buscarPorId(id : UUID) : DemandaTecnica
+}
+interface PerfilRepository <<interface>> {
+  + buscarPorAlunoId(alunoId : UUID) : PerfilCompetenciasDTO
+}
+interface CandidaturaRepository <<interface>> {
+  + salvarComTermo(c : CandidaturaDTO, t : TermoCompromissoDTO) : CandidaturaDTO
+}
+interface TermoRepository <<interface>> {
+  + salvar(t : TermoCompromissoDTO) : TermoCompromissoDTO
+  + buscarPorId(id : UUID) : TermoCompromisso
+  + eventoJaProcessado(eventoId : String) : boolean
+}
+
+' ---------- Interfaces externas ----------
+interface SistemaAcademicoSGA <<externa>> {
+  + consultarAluno(alunoId : UUID) : AlunoDTO
+}
+interface SistemaFiep <<externa>> {
+  + consultarRegularidade(cnpj : String) : RegularidadeDTO
+}
+interface PlataformaAssinatura <<externa>> {
+  + solicitarAssinatura(termo : TermoPayloadDTO) : void
+}
+interface ServicoEmail <<externa>> {
+  + enviarEmail(mensagem : MensagemDTO) : void
+}
+
+' ---------- Relacionamentos ----------
+CandidaturaController --> CandidaturaService
+CandidaturaService --> DemandaRepository
+CandidaturaService --> PerfilRepository
+CandidaturaService --> CandidaturaRepository
+CandidaturaService --> TermoRepository
+CandidaturaService --> SistemaAcademicoSGA
+CandidaturaService --> SistemaFiep
+CandidaturaService --> PlataformaAssinatura
+CandidaturaService --> PoliticaMatching
+CandidaturaService --> NotificacaoService
+NotificacaoService --> ServicoEmail
+
+CandidaturaService ..> DemandaTecnica
+CandidaturaService ..> Candidatura
+CandidaturaService ..> TermoCompromisso
+
+DemandaTecnica "1" --> "1" Convenio
+Candidatura "1" --> "1" DemandaTecnica
+Candidatura "1" --> "1" TermoCompromisso : gera
+Candidatura --> StatusCandidatura
+TermoCompromisso --> StatusTermo
+TermoCompromisso ..> Candidatura : consulta convenio\nvigente (guarda)
+
+note right of CandidaturaRepository
+  salvarComTermo grava Candidatura e Termo
+  em uma unica transacao (funcao RPC no
+  PostgreSQL). Ver ADR 0001.
+end note
+
+note bottom of TermoCompromisso
+  registrarAssinatura trata os eventos
+  ASSINADA, RECUSADA e EXPIRADA e aplica as
+  transicoes de estados.mmd.
+end note
+@enduml

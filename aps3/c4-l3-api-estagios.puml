@@ -1,0 +1,45 @@
+@startuml c4-l3-api-estagios
+!include <C4/C4_Component>
+LAYOUT_WITH_LEGEND()
+
+title API de Estagios - Componentes (C4 Nivel 3) - Candidatura e Termo de Compromisso
+
+Container(spa, "Aplicacao Web", "React + TypeScript", "Interface dos tres perfis")
+Container(webhook, "ReceptorWebhooks", "Supabase Edge Function (Deno)", "Recebe eventos de assinatura")
+ContainerDb(db, "Banco de Dados", "Supabase PostgreSQL 15 + RLS", "alunos, demandas, convenios, candidaturas, termos")
+System_Ext(sga, "SistemaAcademicoSGA", "Matricula, situacao e coeficiente")
+System_Ext(fiep, "SistemaFiep", "Regularidade das empresas")
+System_Ext(assinatura, "PlataformaAssinatura", "Coleta as assinaturas do termo")
+System_Ext(email, "ServicoEmail", "Envia e-mails de notificacao")
+
+Container_Boundary(api, "API de Estagios (Node.js + NestJS)") {
+    Component(cc, "CandidaturaController", "NestJS Controller", "Expoe candidatar() e receberEventoAssinatura()")
+    Component(cs, "CandidaturaService", "NestJS Service", "Orquestra elegibilidade, matching, termo e eventos de assinatura")
+    Component(pm, "PoliticaMatching", "Servico de dominio", "calcular(p, d): grau de compatibilidade")
+    Component(dominio, "Modelo de Dominio", "Classes TypeScript", "DemandaTecnica, Convenio, Candidatura e TermoCompromisso (maquina de estados)")
+    Component(dr, "DemandaRepository", "Interface + adaptador", "buscarPorId")
+    Component(pr, "PerfilRepository", "Interface + adaptador", "buscarPorAlunoId")
+    Component(cr, "CandidaturaRepository", "Interface + adaptador", "salvarComTermo (transacao via RPC)")
+    Component(tr, "TermoRepository", "Interface + adaptador", "salvar, buscarPorId, eventoJaProcessado")
+    Component(ns, "NotificacaoService", "NestJS Service", "notificar(notificacao)")
+}
+
+Rel(spa, cc, "candidatar", "HTTPS / REST + JSON")
+Rel(webhook, cc, "receberEventoAssinatura", "HTTPS / REST + JSON")
+Rel(cc, cs, "candidatar / processarEventoAssinatura")
+Rel(cs, dominio, "Usa DemandaTecnica, Convenio, Candidatura e TermoCompromisso")
+Rel(cs, pm, "calcular")
+Rel(cs, dr, "buscarPorId")
+Rel(cs, pr, "buscarPorAlunoId")
+Rel(cs, cr, "salvarComTermo")
+Rel(cs, tr, "salvar / buscarPorId / eventoJaProcessado")
+Rel(cs, ns, "notificar (assincrono)")
+Rel(dr, db, "Le", "PostgREST")
+Rel(pr, db, "Le", "PostgREST")
+Rel(cr, db, "Grava (RPC transacional)", "PostgREST")
+Rel(tr, db, "Le e grava", "PostgREST")
+Rel(cs, sga, "consultarAluno (sincrono)", "HTTPS / REST + JSON")
+Rel(cs, fiep, "consultarRegularidade (sincrono)", "HTTPS / REST + JSON")
+Rel(cs, assinatura, "solicitarAssinatura (assincrono)", "HTTPS / REST + JSON")
+Rel(ns, email, "enviarEmail (assincrono)", "HTTPS / REST + JSON")
+@enduml
