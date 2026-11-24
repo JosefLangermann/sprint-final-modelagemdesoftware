@@ -1,0 +1,121 @@
+classDiagram
+    direction LR
+
+    class ApplicationController {
+        -ValidationService validationService
+        -ICandidaturaRepository repository
+        -IMessageBroker broker
+        +criarCandidatura(CandidaturaRequestDTO request) CandidaturaStatusDTO
+        +consumirResultadoMatch(ResultadoMatchEvento evento) void
+        +consultarStatus(UUID candidaturaId) CandidaturaStatusDTO
+    }
+
+    class ValidationService {
+        +validar(CandidaturaRequestDTO request) ResultadoValidacaoDTO
+    }
+
+    class ICandidaturaRepository {
+        <<interface>>
+        +salvar(Candidatura candidatura) CandidaturaDTO
+        +atualizarResultado(UUID candidaturaId, StatusCandidatura status, ResultadoMatchDTO resultado) CandidaturaDTO
+        +buscarPorId(UUID candidaturaId) CandidaturaStatusDTO
+        +buscarVagasAtivas(FiltroVagaDTO filtros) List~VagaDTO~
+    }
+
+    class CandidaturaRepositoryPostgres {
+        -Connection conexao
+    }
+
+    class IMessageBroker {
+        <<interface>>
+        +publicarSolicitacaoCompetencias(SolicitacaoCompetenciasEvento evento) ConfirmacaoPublicacaoDTO
+        +publicarCompetenciasDisponiveis(CompetenciasDisponiveisEvento evento) void
+        +publicarResultadoMatch(ResultadoMatchEvento evento) void
+    }
+
+    class RabbitMQAdapter {
+        -Channel canal
+    }
+
+    class CompetenciaService {
+        -ISistemaAcademicoClient academico
+        -IMessageBroker broker
+        +consumirSolicitacaoCompetencias(SolicitacaoCompetenciasEvento evento) void
+    }
+
+    class ISistemaAcademicoClient {
+        <<interface>>
+        +consultarPerfilAcademico(UUID alunoId) PerfilCompetenciasDTO
+    }
+
+    class MatchService {
+        -ICandidaturaRepository repository
+        -IMessageBroker broker
+        +consumirCompetenciasDisponiveis(CompetenciasDisponiveisEvento evento) void
+        -calcularScore(PerfilCompetenciasDTO perfil, VagaDTO vaga) double
+    }
+
+    class Candidatura {
+        -UUID id
+        -UUID alunoId
+        -StatusCandidatura status
+        -DateTime criadaEm
+        +mudarStatus(StatusCandidatura novo) void
+    }
+
+    class StatusCandidatura {
+        <<enumeration>>
+        RASCUNHO
+        RECEBIDA
+        PROCESSANDO
+        PROCESSADA
+        SEM_MATCH
+        FALHA_PROCESSAMENTO
+        CONTRATADA
+        EXPIRADA
+        CANCELADA
+    }
+
+    class Vaga {
+        -UUID id
+        -String titulo
+        -List~String~ requisitos
+        -boolean ativa
+    }
+
+    class EventoBase {
+        <<abstract>>
+        +UUID eventId
+        +UUID candidaturaId
+        +UUID alunoId
+        +UUID correlationId
+        +DateTime occurredAt
+    }
+
+    class SolicitacaoCompetenciasEvento
+    class CompetenciasDisponiveisEvento {
+        +PerfilCompetenciasDTO perfil
+    }
+    class ResultadoMatchEvento {
+        +StatusCandidatura statusFinal
+        +List~VagaScoreDTO~ vagasCompativeis
+    }
+
+    ApplicationController ..> ValidationService : usa
+    ApplicationController --> ICandidaturaRepository
+    ApplicationController --> IMessageBroker
+    MatchService --> ICandidaturaRepository
+    MatchService --> IMessageBroker
+    CompetenciaService --> IMessageBroker
+    CompetenciaService --> ISistemaAcademicoClient
+
+    ICandidaturaRepository <|.. CandidaturaRepositoryPostgres
+    IMessageBroker <|.. RabbitMQAdapter
+
+    Candidatura --> StatusCandidatura
+    ICandidaturaRepository ..> Candidatura
+    ICandidaturaRepository ..> Vaga
+
+    EventoBase <|-- SolicitacaoCompetenciasEvento
+    EventoBase <|-- CompetenciasDisponiveisEvento
+    EventoBase <|-- ResultadoMatchEvento

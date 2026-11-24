@@ -1,0 +1,26 @@
+@startuml C4_L3_API_Aplicacao
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+title C4 - Componentes | API de Aplicação (Node.js + Express)
+
+Container(web, "Frontend Web", "React + TypeScript", "Interface do aluno.")
+ContainerDb(db, "Banco de Dados", "PostgreSQL", "Candidaturas, vagas e resultados.")
+Container(broker, "Message Broker", "RabbitMQ", "Eventos assíncronos do pipeline.")
+
+Container_Boundary(api, "API de Aplicação") {
+    Component(controller, "ApplicationController", "Express Router", "Expõe criarCandidatura, consultarStatus e consome o resultado do match.")
+    Component(validation, "ValidationService", "TypeScript", "Valida CandidaturaRequestDTO e devolve ResultadoValidacaoDTO.")
+    Component(repo, "CandidaturaRepository", "TypeScript / SQL", "Implementa ICandidaturaRepository: salvar, atualizarResultado, buscarPorId.")
+    Component(publisher, "RabbitMQAdapter", "amqplib", "Implementa IMessageBroker: publica e consome eventos.")
+}
+
+Rel(web, controller, "POST /candidaturas, GET /candidaturas/{id}", "REST / JSON / HTTPS")
+Rel(controller, validation, "validar()")
+Rel(controller, repo, "salvar(), buscarPorId(), atualizarResultado()")
+Rel(controller, publisher, "publicarSolicitacaoCompetencias()")
+Rel(repo, db, "Lê e grava", "SQL / TCP")
+Rel(publisher, broker, "Publica SolicitacaoCompetenciasEvento", "AMQP 0-9-1")
+Rel(broker, publisher, "Entrega ResultadoMatchEvento", "AMQP 0-9-1")
+Rel(publisher, controller, "consumirResultadoMatch()")
+@enduml
