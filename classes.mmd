@@ -52,7 +52,11 @@ classDiagram
         -ICandidaturaRepository repository
         -IMessageBroker broker
         +consumirCompetenciasDisponiveis(CompetenciasDisponiveisEvento evento) void
-        -calcularScore(PerfilCompetenciasDTO perfil, VagaDTO vaga) double
+        -PoliticaMatching politicaMatching
+    }
+
+    class PoliticaMatching {
+        +calcular(PerfilCompetenciasDTO perfil, VagaDTO vaga) double
     }
 
     class Candidatura {
@@ -106,6 +110,7 @@ classDiagram
     ApplicationController --> IMessageBroker
     MatchService --> ICandidaturaRepository
     MatchService --> IMessageBroker
+    MatchService --> PoliticaMatching : calcula
     CompetenciaService --> IMessageBroker
     CompetenciaService --> ISistemaAcademicoClient
 

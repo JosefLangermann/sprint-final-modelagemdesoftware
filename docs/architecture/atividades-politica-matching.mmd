@@ -1,0 +1,35 @@
+flowchart TB
+    subgraph MQ["Raia 1 - RabbitMQ"]
+        INICIO((Início))
+        COMPETENCIAS["Entregar CompetenciasDisponiveisEvento<br/>com perfil completo"]
+        RESULTADO["Entregar ResultadoMatchEvento"]
+    end
+    subgraph MS["Raia 2 - MatchService"]
+        PROCESSANDO["Iniciar etapa PROCESSANDO"]
+        TENTATIVA{" "}
+        ANALISAR["Consultar vagas ativas e calcular a compatibilidade"]
+        CONCLUIDA{"Análise concluída?"}
+        RESTAM{"Restam tentativas?"}
+        VAGAS{"Há vaga compatível?"}
+        PROCESSADA["Preparar PROCESSADA com as vagas compatíveis"]
+        SEM_MATCH["Preparar SEM_MATCH com lista vazia"]
+        FALHA["Preparar FALHA_PROCESSAMENTO com lista vazia"]
+        DESFECHO{" "}
+        PUBLICAR["Publicar ResultadoMatchEvento"]
+    end
+    subgraph API["Raia 3 - ApplicationController"]
+        PERSISTIR["Consumir o evento e persistir o status final"]
+        FIM(((Fim)))
+    end
+
+    INICIO --> COMPETENCIAS --> PROCESSANDO --> TENTATIVA --> ANALISAR --> CONCLUIDA
+    CONCLUIDA -->|"[analiseConcluida]"| VAGAS
+    CONCLUIDA -->|"[!analiseConcluida]"| RESTAM
+    RESTAM -->|"[!tentativasEsgotadas]"| TENTATIVA
+    RESTAM -->|"[tentativasEsgotadas]"| FALHA
+    VAGAS -->|"[existeVagaCompativel]"| PROCESSADA
+    VAGAS -->|"[!existeVagaCompativel]"| SEM_MATCH
+    PROCESSADA --> DESFECHO
+    SEM_MATCH --> DESFECHO
+    FALHA --> DESFECHO
+    DESFECHO --> PUBLICAR --> RESULTADO --> PERSISTIR --> FIM

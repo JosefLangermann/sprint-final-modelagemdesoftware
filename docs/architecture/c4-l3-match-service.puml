@@ -1,0 +1,24 @@
+@startuml C4_L3_MatchService
+!include <C4/C4_Component>
+
+LAYOUT_TOP_DOWN()
+LAYOUT_WITH_LEGEND()
+title C4 nível 3 | Serviço de Matching
+
+Container(broker, "Message Broker", "RabbitMQ", "Transporta eventos do fluxo de candidatura.")
+
+Container_Boundary(match, "Serviço de Matching") {
+    Component(servico, "MatchService", "Python", "Orquestra o cálculo e monta o resultado da análise.")
+    Component(politica, "PoliticaMatching", "Python", "Calcula o grau de compatibilidade entre o perfil e uma vaga.")
+    Component(repo, "CandidaturaRepositoryPostgres", "Python / SQL", "Implementa a consulta de vagas ativas de ICandidaturaRepository.")
+}
+
+ContainerDb(db, "Banco de Dados", "PostgreSQL", "Armazena vagas e candidaturas.")
+
+BiRel(broker, servico, "Entrega CompetenciasDisponiveisEvento e recebe ResultadoMatchEvento via IMessageBroker", "AMQP 0-9-1")
+Lay_D(broker, servico)
+Rel_R(servico, politica, "calcular(perfil, vaga)", "Chamada Python")
+Rel_D(servico, repo, "buscarVagasAtivas(filtros)", "Chamada Python")
+Rel_D(repo, db, "Consulta vagas ativas", "SQL / TCP")
+
+@enduml

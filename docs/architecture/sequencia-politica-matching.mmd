@@ -1,0 +1,39 @@
+sequenceDiagram
+    participant MQ as RabbitMQ
+    participant MS as MatchService
+    participant Repo as ICandidaturaRepository
+    participant PM as PoliticaMatching
+    participant Broker as IMessageBroker
+    participant API as ApplicationController
+
+    MQ-)MS: consumirCompetenciasDisponiveis(evento)
+    Note over MS: Perfil completo recebido. Iniciar a etapa PROCESSANDO
+    loop Até concluir a análise ou esgotar as tentativas
+        MS->>Repo: buscarVagasAtivas(filtros)
+        alt Consulta bem-sucedida
+            Repo-->>MS: Lista de VagaDTO
+            loop Para cada vaga ativa, enquanto o cálculo for bem-sucedido
+                MS->>PM: calcular(evento.perfil, vaga)
+                PM-->>MS: grau de compatibilidade (double) ou erro de cálculo
+            end
+        else Falha na consulta
+            Repo-->>MS: erro de consulta
+        end
+        opt Erro na análise e ainda há tentativas
+            Note over MS: Repetir a análise sem publicar um resultado parcial
+        end
+    end
+
+    alt Análise concluída com vagas compatíveis
+        Note over MS: Montar ResultadoMatchEvento com PROCESSADA e vagas compatíveis
+    else Análise concluída sem vagas compatíveis
+        Note over MS: Montar ResultadoMatchEvento com SEM_MATCH e lista vazia
+    else Falha técnica após esgotar as tentativas
+        Note over MS: Montar ResultadoMatchEvento com FALHA_PROCESSAMENTO e lista vazia
+    end
+
+    MS->>Broker: publicarResultadoMatch(eventoResultado)
+    Note over Broker: Publicar evento no RabbitMQ
+    MQ-)API: consumirResultadoMatch(eventoResultado)
+    API->>Repo: atualizarResultado(candidaturaId, statusFinal, resultado)
+    Repo-->>API: CandidaturaDTO atualizado
