@@ -1,0 +1,96 @@
+sequenceDiagram
+    autonumber
+    actor A as Aluno
+    participant CC as CandidaturaController
+    participant CS as CandidaturaService
+    participant DR as DemandaRepository
+    participant PR as PerfilRepository
+    participant SGA as SistemaAcademicoSGA
+    participant FIEP as SistemaFiep
+    participant DT as DemandaTecnica
+    participant CV as Convenio
+    participant PM as PoliticaMatching
+    participant C as Candidatura
+    participant TC as TermoCompromisso
+    participant CR as CandidaturaRepository
+    participant TR as TermoRepository
+    participant AS as PlataformaAssinatura
+    participant WH as ReceptorWebhooks
+    participant NS as NotificacaoService
+    participant EM as ServicoEmail
+
+    A ->> CC: candidatar(alunoId, demandaId)
+    CC ->> CS: candidatar(alunoId, demandaId)
+    CS ->> DR: buscarPorId(id: demandaId)
+    DR -->> CS: DemandaTecnica
+    CS ->> DT: getConvenio()
+    DT -->> CS: Convenio
+    CS ->> CV: getCnpj()
+    CV -->> CS: String (cnpj)
+
+    par Consulta academica (SGA)
+        CS ->> SGA: consultarAluno(alunoId)
+        SGA -->> CS: AlunoDTO
+    and Consulta de regularidade (Fiep)
+        CS ->> FIEP: consultarRegularidade(cnpj)
+        FIEP -->> CS: RegularidadeDTO
+    end
+
+    CS ->> DT: validarElegibilidade(a: AlunoDTO)
+    DT -->> CS: boolean
+    CS ->> CV: estaVigente()
+    CV -->> CS: boolean
+
+    alt [elegivel E convenioVigente E empresaRegular]
+        CS ->> PR: buscarPorAlunoId(alunoId)
+        PR -->> CS: PerfilCompetenciasDTO
+        CS ->> PM: calcular(p: PerfilCompetenciasDTO, d: DemandaTecnicaDTO)
+        PM -->> CS: double (grauCompatibilidade)
+        CS ->> C: confirmar(grauCompatibilidade)
+        C -->> CS: TermoCompromisso (status RASCUNHO)
+        CS ->> CR: salvarComTermo(c: CandidaturaDTO, t: TermoCompromissoDTO)
+        Note over CS,CR: Candidatura e Termo gravados em uma unica transacao (funcao RPC no PostgreSQL, ADR 0001)
+        CR -->> CS: CandidaturaDTO
+        CS ->> TC: enviarParaAssinatura()
+        Note over CS,TC: Termo passa a AGUARDANDO_ASSINATURAS (guarda convenioVigente)
+        CS ->> TR: salvar(t: TermoCompromissoDTO)
+        TR -->> CS: TermoCompromissoDTO
+        CS ->> TC: paraPayload()
+        TC -->> CS: TermoPayloadDTO
+        CS -) AS: solicitarAssinatura(termo: TermoPayloadDTO)
+        Note over CS,AS: Envio so apos o termo estar gravado. Assim o webhook nunca chega antes do registro.
+        CS -->> CC: CandidaturaDTO (status AGUARDANDO_ASSINATURAS)
+        CC -->> A: CandidaturaDTO
+
+        loop enquanto o termo estiver AGUARDANDO_ASSINATURAS
+            AS -) WH: POST /webhooks/assinatura (HMAC)
+            WH ->> CC: receberEventoAssinatura(evento: AssinaturaEventoDTO)
+            CC ->> CS: processarEventoAssinatura(evento: AssinaturaEventoDTO)
+            CS ->> TR: eventoJaProcessado(eventoId)
+            TR -->> CS: boolean
+
+            alt [evento duplicado]
+                CS -->> CC: ignora o evento (idempotente)
+            else [evento novo]
+                CS ->> TR: buscarPorId(id: termoId)
+                TR -->> CS: TermoCompromisso
+                CS ->> TC: registrarAssinatura(e: AssinaturaEventoDTO)
+                TC -->> CS: TermoCompromissoDTO
+                CS ->> TR: salvar(t: TermoCompromissoDTO)
+                TR -->> CS: TermoCompromissoDTO
+
+                alt [todasAssinaturas: termo VIGENTE]
+                    CS -) NS: notificar(notificacao: NotificacaoDTO)
+                    NS -) EM: enviarEmail(mensagem: MensagemDTO)
+                else [assinaturaRecusada OU prazoExpirado: termo RECUSADO ou EXPIRADO]
+                    CS -) NS: notificar(notificacao: NotificacaoDTO)
+                    NS -) EM: enviarEmail(mensagem: MensagemDTO)
+                else [faltamPartes: continua AGUARDANDO_ASSINATURAS]
+                    Note over CS,TC: Nenhuma notificacao. Aguarda o proximo evento.
+                end
+            end
+        end
+    else [inelegivel OU convenioVencido OU empresaIrregular]
+        CS -->> CC: CandidaturaRejeitadaDTO (motivo)
+        CC -->> A: CandidaturaRejeitadaDTO (motivo)
+    end
